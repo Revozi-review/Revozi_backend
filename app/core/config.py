@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_ID_PRO: str = ""
 
+    # Automation microservice
+    AUTOMATION_SERVICE_URL: str = "http://localhost:5001"
+    INTERNAL_SECRET: str = "change-me-shared-secret"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
