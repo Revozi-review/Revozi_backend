@@ -39,10 +39,10 @@ def upgrade() -> None:
         sa.CheckConstraint("status IN ('pending','posted','failed')", name='post_queue_status_check'),
         sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
-    op.create_index('ix_automation_post_queue_workspace_id', 'post_queue', ['workspace_id'], schema='automation')
-    op.create_index('ix_automation_post_queue_status', 'post_queue', ['status'], schema='automation')
+    op.create_index('ix_automation_post_queue_workspace_id', 'post_queue', ['workspace_id'], schema='public')
+    op.create_index('ix_automation_post_queue_status', 'post_queue', ['status'], schema='public')
 
     op.create_table(
         'posts',
@@ -57,7 +57,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -74,7 +74,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -89,12 +89,12 @@ def upgrade() -> None:
         sa.Column('user_id', sa.UUID(), nullable=True),
         sa.Column('reward_triggered', sa.Boolean(), nullable=False, server_default=sa.text('false')),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
-        sa.ForeignKeyConstraint(['post_id'], ['automation.post_queue.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['post_id'], ['post_queue.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
-    op.create_index('ix_automation_engagements_platform', 'engagements', ['platform'], schema='automation')
+    op.create_index('ix_automation_engagements_platform', 'engagements', ['platform'], schema='public')
 
     op.create_table(
         'blogs',
@@ -119,10 +119,10 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
-    op.create_index('ix_automation_blogs_workspace_id', 'blogs', ['workspace_id'], schema='automation')
-    op.create_index('ix_automation_blogs_slug', 'blogs', ['slug'], unique=True, schema='automation')
+    op.create_index('ix_automation_blogs_workspace_id', 'blogs', ['workspace_id'], schema='public')
+    op.create_index('ix_automation_blogs_slug', 'blogs', ['slug'], unique=True, schema='public')
 
     op.create_table(
         'rewards',
@@ -135,10 +135,10 @@ def upgrade() -> None:
         sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('notified', sa.Boolean(), nullable=False, server_default=sa.text('false')),
         sa.CheckConstraint("reward_type IN ('silver','gold','viral')", name='rewards_type_check'),
-        sa.ForeignKeyConstraint(['post_id'], ['automation.post_queue.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['post_id'], ['post_queue.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -155,7 +155,7 @@ def upgrade() -> None:
         sa.CheckConstraint("type IN ('reward','engagement','system','custom')", name='notifications_type_check'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -170,7 +170,7 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -183,7 +183,7 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('bot_name', name='bot_status_bot_name_key'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -192,7 +192,7 @@ def upgrade() -> None:
         sa.Column('value', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.PrimaryKeyConstraint('key'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -203,7 +203,7 @@ def upgrade() -> None:
         sa.Column('output', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
     op.create_table(
@@ -214,26 +214,26 @@ def upgrade() -> None:
         sa.Column('meta', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.PrimaryKeyConstraint('id'),
-        schema='automation',
+        schema='public',
     )
 
 
 def downgrade() -> None:
-    op.drop_table('logs', schema='automation')
-    op.drop_table('ai_outputs', schema='automation')
-    op.drop_table('settings', schema='automation')
-    op.drop_table('bot_status', schema='automation')
-    op.drop_table('leaderboard', schema='automation')
-    op.drop_table('notifications', schema='automation')
-    op.drop_table('rewards', schema='automation')
-    op.drop_index('ix_automation_blogs_slug', table_name='blogs', schema='automation')
-    op.drop_index('ix_automation_blogs_workspace_id', table_name='blogs', schema='automation')
-    op.drop_table('blogs', schema='automation')
-    op.drop_index('ix_automation_engagements_platform', table_name='engagements', schema='automation')
-    op.drop_table('engagements', schema='automation')
-    op.drop_table('generated_posts', schema='automation')
-    op.drop_table('posts', schema='automation')
-    op.drop_index('ix_automation_post_queue_status', table_name='post_queue', schema='automation')
-    op.drop_index('ix_automation_post_queue_workspace_id', table_name='post_queue', schema='automation')
-    op.drop_table('post_queue', schema='automation')
+    op.drop_table('logs', schema='public')
+    op.drop_table('ai_outputs', schema='public')
+    op.drop_table('settings', schema='public')
+    op.drop_table('bot_status', schema='public')
+    op.drop_table('leaderboard', schema='public')
+    op.drop_table('notifications', schema='public')
+    op.drop_table('rewards', schema='public')
+    op.drop_index('ix_automation_blogs_slug', table_name='blogs', schema='public')
+    op.drop_index('ix_automation_blogs_workspace_id', table_name='blogs', schema='public')
+    op.drop_table('blogs', schema='public')
+    op.drop_index('ix_automation_engagements_platform', table_name='engagements', schema='public')
+    op.drop_table('engagements', schema='public')
+    op.drop_table('generated_posts', schema='public')
+    op.drop_table('posts', schema='public')
+    op.drop_index('ix_automation_post_queue_status', table_name='post_queue', schema='public')
+    op.drop_index('ix_automation_post_queue_workspace_id', table_name='post_queue', schema='public')
+    op.drop_table('post_queue', schema='public')
     op.execute("DROP SCHEMA IF EXISTS automation CASCADE")
