@@ -1,8 +1,6 @@
 import uuid
 from datetime import datetime
-
 from pydantic import BaseModel
-
 
 class SubscriptionResponse(BaseModel):
     id: uuid.UUID
@@ -12,7 +10,6 @@ class SubscriptionResponse(BaseModel):
     renewalDate: datetime | None = None
     cancelAtPeriodEnd: bool
     seats: int
-
     model_config = {"from_attributes": True}
 
     @classmethod
@@ -27,11 +24,8 @@ class SubscriptionResponse(BaseModel):
             seats=s.seats,
         )
 
-
 class CheckoutRequest(BaseModel):
-    workspaceId: uuid.UUID
-    plan: str = "pro"
-
+    plan: str = "starter"
 
 class CheckoutResponse(BaseModel):
     url: str
