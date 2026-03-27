@@ -1,5 +1,9 @@
+from urllib.parse import urlencode
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
 from app.services.email import send_email
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +16,10 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, ForgotPasswordRequest, MessageResponse
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -83,7 +91,7 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     access_token = create_access_token(user.id)
@@ -158,3 +166,101 @@ async def reset_password(token: str, new_password: str, db: AsyncSession = Depen
     user.reset_token_expires = None
     await db.commit()
     return MessageResponse(message="Password reset successful.")
+
+
+# ── Google OAuth ──────────────────────────────────────────────
+
+@router.get("/google")
+async def google_login():
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google OAuth is not configured")
+    params = urlencode({
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_AUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "consent",
+    })
+    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}")
+
+
+@router.get("/google/callback")
+async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": settings.GOOGLE_AUTH_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        })
+    if token_resp.status_code != 200:
+        return RedirectResponse(f"{settings.FRONTEND_URL}/login?error=google_failed")
+
+    tokens = token_resp.json()
+
+    # Fetch user info
+    async with httpx.AsyncClient() as client:
+        info_resp = await client.get(GOOGLE_USERINFO_URL, headers={
+            "Authorization": f"Bearer {tokens['access_token']}",
+        })
+    if info_resp.status_code != 200:
+        return RedirectResponse(f"{settings.FRONTEND_URL}/login?error=google_failed")
+
+    info = info_resp.json()
+    email = info["email"]
+    first_name = info.get("given_name", "")
+    last_name = info.get("family_name", "")
+
+    # Find or create user
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            email=email,
+            password_hash=None,
+            first_name=first_name,
+            last_name=last_name,
+            avatar_url=info.get("picture"),
+            email_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+
+        slug_base = re.sub(r"[^a-z0-9]", "-", f"{first_name}-{last_name}".lower()).strip("-")
+        slug = f"{slug_base}-{uuid.uuid4().hex[:6]}"
+        workspace = Workspace(
+            name=f"{first_name}'s Workspace",
+            slug=slug,
+            owner_id=user.id,
+        )
+        db.add(workspace)
+        await db.commit()
+    else:
+        await db.commit()
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    # Redirect to frontend callback with user info
+    params = urlencode({
+        "token": access_token,
+        "firstName": first_name,
+        "lastName": last_name,
+        "email": email,
+        "id": str(user.id),
+    })
+    redirect = RedirectResponse(f"{settings.FRONTEND_URL}/auth-callback?{params}")
+    redirect.set_cookie(
+        key=REFRESH_COOKIE_KEY,
+        value=refresh_token,
+        httponly=True,
+        secure=settings.APP_ENV != "development",
+        samesite="lax",
+        max_age=REFRESH_COOKIE_MAX_AGE,
+        path="/",
+    )
+    return redirect

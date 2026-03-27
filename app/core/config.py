@@ -27,10 +27,14 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
 
-    # Google Business Profile (Google Reviews)
+    # Google OAuth (shared credentials)
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/platforms/google/callback"
+    GOOGLE_AUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
+
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""
