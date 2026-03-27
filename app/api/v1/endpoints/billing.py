@@ -149,3 +149,16 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             await db.flush()
 
     return {"received": True}
+
+@router.post("/test-subscription-email")
+async def test_subscription_email(email: str, name: str = "Test User"):
+    from app.services.email import send_subscription_email
+    await send_subscription_email(
+        to_email=email,
+        name=name,
+        plan_name="Pro",
+        amount="29",
+        billing_period="month",
+        dashboard_url="https://revozi.com/dashboard"
+    )
+    return {"message": f"Subscription email sent to {email}"}
