@@ -9,6 +9,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.subscription import Subscription
+from app.services.email import send_email
 from app.schemas.billing import SubscriptionResponse, CheckoutRequest, CheckoutResponse
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -113,6 +114,26 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             if ws:
                 ws.plan = plan
             await db.flush()
+            # Send subscription confirmation email
+            if ws:
+                user_result = await db.execute(select(User).where(User.id == ws.owner_id))
+                owner = user_result.scalar_one_or_none()
+                if owner:
+                    plan_labels = {"starter": "Starter", "pro": "Pro", "enterprise": "Enterprise"}
+                    plan_prices = {"starter": "19.00", "pro": "49.00", "enterprise": "99.00"}
+                    try:
+                        await send_email(
+                            to_email=owner.email,
+                            subject="Subscription Confirmed - Revozi",
+                            template_name="subscription",
+                            name=owner.first_name,
+                            plan_name=f"{plan_labels.get(plan, plan.title())} Plan",
+                            amount=plan_prices.get(plan, "0.00"),
+                            billing_period="month",
+                            dashboard_url="https://revozi.com/dashboard",
+                        )
+                    except Exception as e:
+                        print(f"Subscription email failed: {e}")
 
     elif event["type"] == "customer.subscription.deleted":
         stripe_sub_id = event["data"]["object"]["id"]

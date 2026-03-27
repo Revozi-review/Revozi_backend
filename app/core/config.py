@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,https://revozi.com,https://www.revozi.com"
 
+    # Email (SendGrid)
+    SMTP_PASSWORD: str = ""
+    SENDGRID_FROM_EMAIL: str = "noreply@revozi.com"
+    
     # LLM
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
