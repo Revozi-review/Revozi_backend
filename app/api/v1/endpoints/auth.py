@@ -201,7 +201,7 @@ async def google_login():
         "access_type": "offline",
         "prompt": "consent",
     })
-    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}")
+    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}", status_code=302)
 
 
 @router.get("/google-callback")
