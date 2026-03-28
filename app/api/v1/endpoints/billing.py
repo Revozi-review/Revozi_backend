@@ -162,3 +162,33 @@ async def test_subscription_email(email: str, name: str = "Test User"):
         dashboard_url="https://revozi.com/dashboard"
     )
     return {"message": f"Subscription email sent to {email}"}
+
+@router.post("/test-email/{template}")
+async def test_email(template: str, email: str, name: str = "Emmanuel"):
+    from app.services.email import (
+        send_welcome_email, send_verification_email, send_reset_password_email,
+        send_subscription_email, send_payment_success_email, send_payment_failed_email,
+        send_refund_email, send_subscription_expired_email, send_subscription_reminder_email
+    )
+    base = "https://revozi.com"
+    if template == "welcome":
+        await send_welcome_email(email, name, f"{base}/dashboard")
+    elif template == "verify":
+        await send_verification_email(email, name, f"{base}/verify?token=testtoken123")
+    elif template == "reset":
+        await send_reset_password_email(email, name, f"{base}/reset?token=testtoken123")
+    elif template == "subscription":
+        await send_subscription_email(email, name, "Pro", "29", "month", f"{base}/dashboard")
+    elif template == "payment_success":
+        await send_payment_success_email(email, name, "29.00", "Pro", "May 1, 2026", f"{base}/dashboard")
+    elif template == "payment_failed":
+        await send_payment_failed_email(email, name, "29.00", f"{base}/billing")
+    elif template == "refund":
+        await send_refund_email(email, name, "29.00", "March 28, 2026")
+    elif template == "expired":
+        await send_subscription_expired_email(email, name, f"{base}/pricing")
+    elif template == "reminder":
+        await send_subscription_reminder_email(email, name, "7", f"{base}/billing")
+    else:
+        return {"error": "Unknown template"}
+    return {"message": f"Sent {template} email to {email}"}
