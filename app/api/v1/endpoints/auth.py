@@ -326,7 +326,12 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     from datetime import datetime, timezone
     result = await db.execute(select(User).where(User.reset_token == token))
     user = result.scalar_one_or_none()
-    if not user or not user.reset_token_expires or user.reset_token_expires < datetime.now(timezone.utc):
+    if not user or not user.reset_token_expires:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    expires = user.reset_token_expires
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Invalid or expired verification link")
     user.email_verified = True
     user.reset_token = None
