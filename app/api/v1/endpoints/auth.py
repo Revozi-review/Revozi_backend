@@ -84,6 +84,25 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
         )
     except Exception as e:
         print(f"Welcome email failed: {e}")
+
+    # Send verification email
+    import secrets
+    from datetime import datetime, timedelta, timezone
+    verify_token = secrets.token_urlsafe(32)
+    user.reset_token = verify_token
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    await db.commit()
+    try:
+        await send_email(
+            to_email=user.email,
+            subject="Verify your email - Revozi",
+            template_name="verify",
+            name=user.first_name or user.email.split("@")[0],
+            verification_url=f"{settings.FRONTEND_URL}/verify-email?token={verify_token}",
+        )
+    except Exception as e:
+        print(f"Verify email failed: {e}")
+
     return TokenResponse(accessToken=access_token)
 
 
