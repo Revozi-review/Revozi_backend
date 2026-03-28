@@ -15,7 +15,7 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.core.config import settings
 from app.models.user import User
 from app.models.workspace import Workspace
-from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, ForgotPasswordRequest, MessageResponse
+from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, RefreshRequest, ForgotPasswordRequest, MessageResponse
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -121,8 +121,14 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
-    token = request.cookies.get(REFRESH_COOKIE_KEY)
+async def refresh(request: Request, response: Response, body: RefreshRequest = None, db: AsyncSession = Depends(get_db)):
+    # Try to get refresh token from request body first (cross-domain),
+    # then fall back to cookie (same-domain)
+    token = None
+    if body and body.refreshToken:
+        token = body.refreshToken
+    if not token:
+        token = request.cookies.get(REFRESH_COOKIE_KEY)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
 
@@ -140,7 +146,7 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
     new_refresh = create_refresh_token(user.id)
     _set_refresh_cookie(response, new_refresh)
 
-    return TokenResponse(accessToken=access_token)
+    return TokenResponse(accessToken=access_token, refreshToken=new_refresh)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -267,14 +273,17 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
     refresh_token = create_refresh_token(user.id)
 
     # Redirect to frontend callback with user info
+    # Include refreshToken in URL params to handle cross-domain cookie dropping
     params = urlencode({
         "token": access_token,
+        "refreshToken": refresh_token,
         "firstName": first_name,
         "lastName": last_name,
         "email": email,
         "id": str(user.id),
     })
     redirect = RedirectResponse(f"{settings.FRONTEND_URL}/auth-callback?{params}")
+    # Also set cookie as fallback for same-domain setups
     redirect.set_cookie(
         key=REFRESH_COOKIE_KEY,
         value=refresh_token,
