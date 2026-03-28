@@ -29,22 +29,22 @@ async def send_welcome_email(to_email: str, name: str, dashboard_url: str):
     await send_email(to_email, "Welcome to Revozi!", "welcome", name=name, dashboard_url=dashboard_url)
 
 async def send_verification_email(to_email: str, name: str, verification_url: str):
-    await send_email(to_email, "Verify your email — Revozi", "verify", name=name, verification_url=verification_url)
+    await send_email(to_email, "Verify your email - Revozi", "verify", name=name, verification_url=verification_url)
 
 async def send_reset_password_email(to_email: str, name: str, reset_url: str):
-    await send_email(to_email, "Reset your password — Revozi", "reset_password", name=name, reset_url=reset_url)
+    await send_email(to_email, "Reset your password - Revozi", "reset_password", name=name, reset_url=reset_url)
 
 async def send_subscription_email(to_email: str, name: str, plan_name: str, amount: str, billing_period: str, dashboard_url: str):
     await send_email(to_email, "Your Revozi subscription is active!", "subscription", name=name, plan_name=plan_name, amount=amount, billing_period=billing_period, dashboard_url=dashboard_url)
 
 async def send_payment_success_email(to_email: str, name: str, amount: str, plan_name: str, next_billing_date: str, dashboard_url: str):
-    await send_email(to_email, "Payment received — Revozi", "payment_success", name=name, amount=amount, plan_name=plan_name, next_billing_date=next_billing_date, dashboard_url=dashboard_url)
+    await send_email(to_email, "Payment received - Revozi", "payment_success", name=name, amount=amount, plan_name=plan_name, next_billing_date=next_billing_date, dashboard_url=dashboard_url)
 
 async def send_payment_failed_email(to_email: str, name: str, amount: str, update_url: str):
-    await send_email(to_email, "Payment failed — action required", "payment_failed", name=name, amount=amount, update_url=update_url)
+    await send_email(to_email, "Payment failed - action required", "payment_failed", name=name, amount=amount, update_url=update_url)
 
 async def send_refund_email(to_email: str, name: str, amount: str, refund_date: str):
-    await send_email(to_email, "Your refund has been processed — Revozi", "refund", name=name, amount=amount, refund_date=refund_date)
+    await send_email(to_email, "Your refund has been processed - Revozi", "refund", name=name, amount=amount, refund_date=refund_date)
 
 async def send_subscription_expired_email(to_email: str, name: str, rejoin_url: str):
     await send_email(to_email, "Your Revozi subscription has expired", "subscription_expired", name=name, rejoin_url=rejoin_url)
