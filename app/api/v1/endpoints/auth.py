@@ -204,7 +204,7 @@ async def google_login():
     return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}")
 
 
-@router.get("/google/callback")
+@router.get("/google-callback")
 async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
     # Exchange code for tokens
     async with httpx.AsyncClient() as client:
