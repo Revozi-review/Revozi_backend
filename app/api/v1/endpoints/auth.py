@@ -205,8 +205,10 @@ async def google_login():
 
 
 @router.get("/google-callback/")
-async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
+async def google_callback(code: str = None, error: str = None, db: AsyncSession = Depends(get_db)):
     # Exchange code for tokens
+    if not code:
+        return RedirectResponse(f"{settings.FRONTEND_URL}/login?error=google_failed")
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(GOOGLE_TOKEN_URL, data={
             "code": code,
