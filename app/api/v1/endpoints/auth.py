@@ -73,7 +73,7 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
     refresh_token = create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
-    # Send welcome email
+    # Send welcome + verify email
     try:
         await send_email(
             to_email=user.email,
@@ -264,3 +264,53 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         path="/",
     )
     return redirect
+
+
+@router.post("/send-verification", response_model=MessageResponse)
+async def send_verification(request: Request, db: AsyncSession = Depends(get_db)):
+    from app.core.deps import get_current_user
+    import secrets
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = auth_header.split(" ")[1]
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.email_verified:
+        return MessageResponse(message="Email already verified")
+    verify_token = secrets.token_urlsafe(32)
+    user.reset_token = verify_token
+    from datetime import datetime, timedelta, timezone
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    await db.commit()
+    try:
+        await send_email(
+            to_email=user.email,
+            subject="Verify your email - Revozi",
+            template_name="verify",
+            name=user.first_name or user.email.split("@")[0],
+            verification_url=f"{settings.FRONTEND_URL}/verify-email?token={verify_token}",
+        )
+    except Exception as e:
+        print(f"Verify email failed: {e}")
+    return MessageResponse(message="Verification email sent.")
+
+
+@router.get("/verify-email", response_model=MessageResponse)
+async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+    from datetime import datetime, timezone
+    result = await db.execute(select(User).where(User.reset_token == token))
+    user = result.scalar_one_or_none()
+    if not user or not user.reset_token_expires or user.reset_token_expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    user.email_verified = True
+    user.reset_token = None
+    user.reset_token_expires = None
+    await db.commit()
+    return MessageResponse(message="Email verified successfully.")
