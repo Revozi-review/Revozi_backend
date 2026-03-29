@@ -39,10 +39,10 @@ class Settings(BaseSettings):
     # Stripe
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
-    STRIPE_PRICE_ID_PRO: str = ""
+
     STRIPE_PRICE_ID_STARTER: str = ""
-    STRIPE_PRICE_ID_GROWTH: str = ""
-    STRIPE_PRICE_ID_ENTERPRISE: str = ""
+
+
 
     # Automation microservice
     AUTOMATION_SERVICE_URL: str = "http://localhost:5001"

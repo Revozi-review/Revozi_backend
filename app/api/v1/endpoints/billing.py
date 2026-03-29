@@ -16,8 +16,6 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 PLAN_PRICE_MAP = {
     "starter": "STRIPE_PRICE_ID_STARTER",
-    "pro": "STRIPE_PRICE_ID_GROWTH",
-    "enterprise": "STRIPE_PRICE_ID_ENTERPRISE",
 }
 
 @router.get("/subscription", response_model=SubscriptionResponse | None)
@@ -119,8 +117,8 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 user_result = await db.execute(select(User).where(User.id == ws.owner_id))
                 owner = user_result.scalar_one_or_none()
                 if owner:
-                    plan_labels = {"starter": "Starter", "pro": "Pro", "enterprise": "Enterprise"}
-                    plan_prices = {"starter": "19.00", "pro": "49.00", "enterprise": "99.00"}
+                    plan_labels = {"starter": "Starter"}
+                    plan_prices = {"starter": "19.00"}
                     try:
                         await send_email(
                             to_email=owner.email,
