@@ -211,10 +211,13 @@ async def google_login():
 
 
 @router.get("/google-callback")
-async def google_callback(code: str = None, error: str = None, db: AsyncSession = Depends(get_db)):
+async def google_callback(code: str = None, error: str = None, response: Response = None, db: AsyncSession = Depends(get_db)):
     # Exchange code for tokens
     if not code:
         return RedirectResponse(f"{settings.FRONTEND_URL}/login?error=google_failed")
+
+    print("🔵 [OAuth] Callback started")
+
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(GOOGLE_TOKEN_URL, data={
             "code": code,
@@ -224,9 +227,11 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
             "grant_type": "authorization_code",
         })
     if token_resp.status_code != 200:
+        print(f"❌ [OAuth] Token exchange failed: {token_resp.status_code}")
         return RedirectResponse(f"{settings.FRONTEND_URL}/login?error=google_failed")
 
     tokens = token_resp.json()
+    print(f"✅ [OAuth] Token exchange successful")
 
     # Fetch user info
     async with httpx.AsyncClient() as client:
@@ -234,18 +239,21 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
             "Authorization": f"Bearer {tokens['access_token']}",
         })
     if info_resp.status_code != 200:
+        print(f"❌ [OAuth] User info fetch failed: {info_resp.status_code}")
         return RedirectResponse(f"{settings.FRONTEND_URL}/login?error=google_failed")
 
     info = info_resp.json()
     email = info["email"]
     first_name = info.get("given_name", "")
     last_name = info.get("family_name", "")
+    print(f"✅ [OAuth] User info retrieved: {email}")
 
     # Find or create user
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if not user:
+        print(f"🆕 [OAuth] Creating new user: {email}")
         user = User(
             email=email,
             password_hash=None,
@@ -256,6 +264,7 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
         )
         db.add(user)
         await db.flush()
+        print(f"✅ [OAuth] User flushed to DB: {user.id}")
 
         slug_base = re.sub(r"[^a-z0-9]", "-", f"{first_name}-{last_name}".lower()).strip("-")
         slug = f"{slug_base}-{uuid.uuid4().hex[:6]}"
@@ -265,12 +274,19 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
             owner_id=user.id,
         )
         db.add(workspace)
-        await db.commit()
+        await db.flush()
+        print(f"✅ [OAuth] Workspace flushed to DB: {workspace.id}")
     else:
-        await db.commit()
+        print(f"👤 [OAuth] Existing user found: {email}")
 
+    # CRITICAL: Ensure ALL database changes are fully committed before proceeding
+    await db.commit()
+    print(f"✅ [OAuth] Database transaction COMMITTED for user: {user.id}")
+
+    # Create tokens ONLY after successful commit
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
+    print(f"✅ [OAuth] Tokens created for user: {user.id}")
 
     # Redirect to frontend callback with user info
     # Include refreshToken in URL params to handle cross-domain cookie dropping
@@ -282,8 +298,11 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
         "email": email,
         "id": str(user.id),
     })
-    redirect = RedirectResponse(f"{settings.FRONTEND_URL}/auth-callback?{params}")
-    # Also set cookie as fallback for same-domain setups
+
+    # Create response with redirect
+    redirect = RedirectResponse(f"{settings.FRONTEND_URL}/auth-callback?{params}", status_code=302)
+
+    # Set cookie as fallback for same-domain setups
     redirect.set_cookie(
         key=REFRESH_COOKIE_KEY,
         value=refresh_token,
@@ -293,6 +312,8 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
         max_age=REFRESH_COOKIE_MAX_AGE,
         path="/",
     )
+
+    print(f"✅ [OAuth] Redirecting user to frontend with tokens")
     return redirect
 
 
