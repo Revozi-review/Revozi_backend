@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, ForeignKey, func
+from sqlalchemy import String, DateTime, ForeignKey, func, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,7 @@ class Workspace(Base):
     brand_tone: Mapped[str] = mapped_column(String(50), nullable=False, default="neutral")
     reply_style: Mapped[str | None] = mapped_column(String(100), nullable=True)
     onboarding_complete: Mapped[bool] = mapped_column(default=False)
+    notification_preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", backref="workspaces")

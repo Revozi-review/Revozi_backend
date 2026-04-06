@@ -4,6 +4,12 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class UserUpdateRequest(BaseModel):
+    firstName: str | None = None
+    lastName: str | None = None
+    avatarUrl: str | None = None
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: str

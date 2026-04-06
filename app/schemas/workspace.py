@@ -40,3 +40,9 @@ class WorkspaceUpdateRequest(BaseModel):
     replyStyle: str | None = None
     logoUrl: str | None = None
     onboardingComplete: bool | None = None
+
+
+class WorkspaceNotificationsRequest(BaseModel):
+    oneStarAlerts: bool | None = None
+    dailySummary: bool | None = None
+    weeklyPerformance: bool | None = None

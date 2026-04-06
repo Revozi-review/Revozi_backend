@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.workspace import Workspace
-from app.schemas.workspace import WorkspaceResponse, WorkspaceUpdateRequest
+from app.schemas.workspace import WorkspaceResponse, WorkspaceUpdateRequest, WorkspaceNotificationsRequest
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -72,4 +72,48 @@ async def update_workspace(
         ws.onboarding_complete = body.onboardingComplete
 
     await db.flush()
+    return WorkspaceResponse.from_orm_workspace(ws)
+
+
+@router.delete("/{workspace_id}", status_code=204)
+async def delete_workspace(
+    workspace_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.owner_id == user.id)
+    )
+    ws = result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    await db.delete(ws)
+    await db.commit()
+
+
+@router.patch("/{workspace_id}/notifications", response_model=WorkspaceResponse)
+async def update_notifications(
+    workspace_id: uuid.UUID,
+    body: WorkspaceNotificationsRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.owner_id == user.id)
+    )
+    ws = result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    prefs = dict(ws.notification_preferences or {})
+    if body.oneStarAlerts is not None:
+        prefs["oneStarAlerts"] = body.oneStarAlerts
+    if body.dailySummary is not None:
+        prefs["dailySummary"] = body.dailySummary
+    if body.weeklyPerformance is not None:
+        prefs["weeklyPerformance"] = body.weeklyPerformance
+    ws.notification_preferences = prefs
+
+    await db.commit()
+    await db.refresh(ws)
     return WorkspaceResponse.from_orm_workspace(ws)

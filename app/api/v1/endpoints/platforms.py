@@ -121,7 +121,7 @@ async def google_callback(
     await db.commit()
 
     # Redirect back to frontend integration page
-    return RedirectResponse(url="http://localhost:3000/integration?connected=google")
+    return RedirectResponse(url="https://revozi.com/integration?connected=google")
 
 
 @router.get("/{workspace_id}/connections")

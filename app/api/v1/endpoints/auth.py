@@ -15,7 +15,7 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.core.config import settings
 from app.models.user import User
 from app.models.workspace import Workspace
-from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, RefreshRequest, ForgotPasswordRequest, MessageResponse
+from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, RefreshRequest, ForgotPasswordRequest, MessageResponse, ChangePasswordRequest
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -351,6 +351,32 @@ async def send_verification(request: Request, db: AsyncSession = Depends(get_db)
     except Exception as e:
         print(f"Verify email failed: {e}")
     return MessageResponse(message="Verification email sent.")
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    from app.core.deps import get_current_user
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = auth_header.split(" ")[1]
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.password_hash or not verify_password(body.currentPassword, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    user.password_hash = hash_password(body.newPassword)
+    await db.commit()
+    return MessageResponse(message="Password changed successfully.")
 
 
 @router.get("/verify-email", response_model=MessageResponse)
