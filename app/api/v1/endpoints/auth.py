@@ -11,6 +11,7 @@ import re
 import uuid
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
 from app.models.user import User
@@ -69,8 +70,8 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
     db.add(workspace)
     await db.flush()
 
-    access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token(user.id, user.token_version)
+    refresh_token = create_refresh_token(user.id, user.token_version)
     _set_refresh_cookie(response, refresh_token)
 
     # Send welcome + verify email
@@ -113,8 +114,8 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
-    access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token(user.id, user.token_version)
+    refresh_token = create_refresh_token(user.id, user.token_version)
     _set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(accessToken=access_token)
@@ -142,8 +143,11 @@ async def refresh(request: Request, response: Response, body: RefreshRequest = N
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-    access_token = create_access_token(user.id)
-    new_refresh = create_refresh_token(user.id)
+    if payload.get("ver") != user.token_version:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been invalidated")
+
+    access_token = create_access_token(user.id, user.token_version)
+    new_refresh = create_refresh_token(user.id, user.token_version)
     _set_refresh_cookie(response, new_refresh)
 
     return TokenResponse(accessToken=access_token, refreshToken=new_refresh)
@@ -284,8 +288,8 @@ async def google_callback(code: str = None, error: str = None, response: Respons
     print(f"✅ [OAuth] Database transaction COMMITTED for user: {user.id}")
 
     # Create tokens ONLY after successful commit
-    access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token(user.id, user.token_version)
+    refresh_token = create_refresh_token(user.id, user.token_version)
     print(f"✅ [OAuth] Tokens created for user: {user.id}")
 
     # Redirect to frontend callback with user info
@@ -356,27 +360,31 @@ async def send_verification(request: Request, db: AsyncSession = Depends(get_db)
 @router.post("/change-password", response_model=MessageResponse)
 async def change_password(
     body: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
 ):
-    from app.core.deps import get_current_user
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = auth_header.split(" ")[1]
-    payload = decode_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
     if not user.password_hash or not verify_password(body.currentPassword, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     user.password_hash = hash_password(body.newPassword)
     await db.commit()
     return MessageResponse(message="Password changed successfully.")
+
+
+@router.post("/sign-out-all", response_model=TokenResponse)
+async def sign_out_all(
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.token_version += 1
+    await db.commit()
+    await db.refresh(user)
+
+    access_token = create_access_token(user.id, user.token_version)
+    refresh_token = create_refresh_token(user.id, user.token_version)
+    _set_refresh_cookie(response, refresh_token)
+    
+    return TokenResponse(accessToken=access_token)
 
 
 @router.get("/verify-email", response_model=MessageResponse)

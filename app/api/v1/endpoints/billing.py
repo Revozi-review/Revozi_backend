@@ -10,7 +10,10 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.subscription import Subscription
 from app.services.email import send_email
-from app.schemas.billing import SubscriptionResponse, CheckoutRequest, CheckoutResponse
+from app.schemas.billing import SubscriptionResponse, CheckoutRequest, CheckoutResponse, UsageResponse
+from datetime import datetime, timezone
+from sqlalchemy import func as sa_func
+from app.models.feedback import Feedback
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -47,13 +50,8 @@ async def create_checkout(
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Billing not configured.")
 
-    price_attr = PLAN_PRICE_MAP.get(body.plan)
-    if not price_attr:
-        raise HTTPException(status_code=400, detail=f"Unknown plan: {body.plan}")
-
-    price_id = getattr(settings, price_attr, None)
-    if not price_id:
-        raise HTTPException(status_code=503, detail=f"Price not configured for plan: {body.plan}")
+    if not body.priceId.startswith("price_"):
+        raise HTTPException(status_code=400, detail="Invalid Stripe price ID")
 
     import stripe
     stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -61,7 +59,7 @@ async def create_checkout(
     session = stripe.checkout.Session.create(
         mode="subscription",
         payment_method_types=["card"],
-        line_items=[{"price": price_id, "quantity": 1}],
+        line_items=[{"price": body.priceId, "quantity": 1}],
         success_url="https://revozi.com/billing?success=true",
         cancel_url="https://revozi.com/billing?canceled=true",
         client_reference_id=str(workspace.id),
@@ -69,6 +67,66 @@ async def create_checkout(
         metadata={"workspace_id": str(workspace.id), "user_id": str(user.id), "plan": body.plan},
     )
     return CheckoutResponse(url=session.url)
+
+TIER_LIMITS = {
+    "free": 50,
+    "starter": 500,
+    "growth": 2500,
+}
+
+@router.get("/usage", response_model=UsageResponse)
+async def get_usage(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Workspace).where(Workspace.owner_id == user.id).limit(1))
+    ws = result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.workspace_id == ws.id))
+    sub = sub_result.scalar_one_or_none()
+    
+    plan = sub.plan if sub else ws.plan
+    allow_overage = sub.allow_overage if sub else False
+    limit = TIER_LIMITS.get(plan.lower(), 50)
+    
+    now = datetime.now(timezone.utc)
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    count_result = await db.execute(
+        select(sa_func.count()).select_from(Feedback).where(
+            Feedback.workspace_id == ws.id,
+            Feedback.created_at >= start_of_month
+        )
+    )
+    current_usage = count_result.scalar() or 0
+
+    return UsageResponse(
+        currentUsage=current_usage,
+        limit=limit,
+        allowOverage=allow_overage,
+        tier=plan
+    )
+
+@router.post("/approve-overage")
+async def approve_overage(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Workspace).where(Workspace.owner_id == user.id).limit(1))
+    ws = result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.workspace_id == ws.id))
+    sub = sub_result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=400, detail="No active subscription found")
+    
+    sub.allow_overage = True
+    await db.commit()
+    return {"message": "Overage approved successfully"}
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):

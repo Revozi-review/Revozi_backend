@@ -25,7 +25,14 @@ class SubscriptionResponse(BaseModel):
         )
 
 class CheckoutRequest(BaseModel):
+    priceId: str
     plan: str = "starter"
 
 class CheckoutResponse(BaseModel):
     url: str
+
+class UsageResponse(BaseModel):
+    currentUsage: int
+    limit: int
+    allowOverage: bool
+    tier: str

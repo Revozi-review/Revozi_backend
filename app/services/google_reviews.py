@@ -144,11 +144,48 @@ async def sync_reviews_to_workspace(
     access_token = connection.access_token
     metadata = connection.metadata_json or {}
     account_name = metadata.get("account_name")
-    location_name = metadata.get("location_name")
+    
+    stored_locations = metadata.get("locations", [])
+    if not stored_locations and metadata.get("location_name"):
+        stored_locations = [{"name": metadata.get("location_name"), "title": metadata.get("location_title", ""), "sync_enabled": True}]
+        
+    sync_locations = [loc["name"] for loc in stored_locations if loc.get("sync_enabled", False)]
 
-    if not account_name or not location_name:
-        logger.error(f"Missing account/location in platform connection {connection.id}")
+    if not account_name or not sync_locations:
+        logger.error(f"Missing account or no enabled locations in platform connection {connection.id}")
         return 0
+
+    # Limit Enforcement Start
+    from app.models.workspace import Workspace
+    from app.models.subscription import Subscription
+    from app.api.v1.endpoints.billing import TIER_LIMITS
+    from datetime import datetime, timezone
+    from sqlalchemy import func as sa_func
+
+    ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    ws = ws_result.scalar_one_or_none()
+    sub_result = await db.execute(select(Subscription).where(Subscription.workspace_id == workspace_id))
+    sub = sub_result.scalar_one_or_none()
+
+    plan = sub.plan if sub else (ws.plan if ws else "free")
+    allow_overage = sub.allow_overage if sub else False
+    limit = TIER_LIMITS.get(plan.lower(), 50)
+
+    now = datetime.now(timezone.utc)
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    count_result = await db.execute(
+        select(sa_func.count()).select_from(Feedback).where(
+            Feedback.workspace_id == workspace_id,
+            Feedback.created_at >= start_of_month
+        )
+    )
+    current_usage = count_result.scalar() or 0
+
+    if current_usage >= limit and not allow_overage:
+        logger.warning(f"Workspace {workspace_id} at review limit ({limit}). New reviews stored as pending_approval.")
+        # Don't return 0 — fall through to store reviews in pending state
+    # Limit Enforcement End
 
     # Refresh token if needed
     if connection.refresh_token:
@@ -160,44 +197,67 @@ async def sync_reviews_to_workspace(
         except Exception as e:
             logger.warning(f"Token refresh failed, using existing token: {e}")
 
-    try:
-        reviews = await fetch_reviews(access_token, location_name)
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Failed to fetch reviews: {e}")
-        return 0
-
     imported = 0
-    for review in reviews:
-        review_id = review.get("reviewId") or review.get("name", "")
-
-        # Skip if already imported (deduplication)
-        existing = await db.execute(
-            select(Feedback).where(Feedback.external_id == review_id)
-        )
-        if existing.scalar_one_or_none():
+    for location_name in sync_locations:
+        try:
+            reviews = await fetch_reviews(access_token, location_name)
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to fetch reviews for {location_name}: {e}")
             continue
 
-        comment = review.get("comment", "")
-        if not comment:
-            continue
+        for review in reviews:
+            review_id = review.get("reviewId") or review.get("name", "")
 
-        star_rating = review.get("starRating", "")
-        reviewer = review.get("reviewer", {})
-        display_name = reviewer.get("displayName", "Google Reviewer")
+            # Skip if already imported (deduplication)
+            existing = await db.execute(
+                select(Feedback).where(Feedback.external_id == review_id)
+            )
+            if existing.scalar_one_or_none():
+                continue
 
-        fb = Feedback(
-            workspace_id=workspace_id,
-            author=display_name,
-            content=comment,
-            rating=_star_rating_to_int(star_rating),
-            source="google_reviews",
-            external_id=review_id,
-            status="open",
-        )
-        db.add(fb)
-        imported += 1
+            comment = review.get("comment", "")
+            if not comment:
+                continue
+
+            star_rating = review.get("starRating", "")
+            reviewer = review.get("reviewer", {})
+            display_name = reviewer.get("displayName", "Google Reviewer")
+
+            is_over_limit = (limit is not None) and (current_usage + imported >= limit) and not allow_overage
+            review_status = "pending_approval" if is_over_limit else "open"
+
+            fb = Feedback(
+                workspace_id=workspace_id,
+                author=display_name,
+                content=comment,
+                rating=_star_rating_to_int(star_rating),
+                source="google_reviews",
+                external_id=review_id,
+                status=review_status,
+            )
+            db.add(fb)
+            imported += 1
+
+        # After each location, no hard-stop anymore — pending_approval handles it
 
     if imported > 0:
         await db.flush()
+        
+        # Post-import overage invoicing
+        if allow_overage:
+            new_billable = max(0, imported - max(0, limit - current_usage))
+            if new_billable > 0 and sub and sub.stripe_subscription_id and settings.STRIPE_SECRET_KEY:
+                import stripe
+                stripe.api_key = settings.STRIPE_SECRET_KEY
+                try:
+                    stripe_sub = stripe.Subscription.retrieve(sub.stripe_subscription_id)
+                    stripe.InvoiceItem.create(
+                        customer=stripe_sub.customer,
+                        amount=new_billable * 10, # $0.10 per extra review
+                        currency="usd",
+                        description=f"Overage: {new_billable} extra reviews synced"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to create Stripe invoice item: {e}")
 
     return imported

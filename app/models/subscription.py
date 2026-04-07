@@ -19,3 +19,4 @@ class Subscription(Base):
     renewal_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
     seats: Mapped[int] = mapped_column(Integer, default=1)
+    allow_overage: Mapped[bool] = mapped_column(Boolean, default=False)

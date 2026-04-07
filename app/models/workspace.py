@@ -22,5 +22,6 @@ class Workspace(Base):
     onboarding_complete: Mapped[bool] = mapped_column(default=False)
     notification_preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User", backref="workspaces")

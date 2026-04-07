@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.platform_connection import PlatformConnection
 from app.schemas.auth import MessageResponse
+from app.schemas.platforms import LocationResponse, LocationToggleRequest
 from app.services.google_reviews import (
     get_google_auth_url,
     exchange_code_for_tokens,
@@ -47,7 +48,8 @@ async def connect_google(
     # Encode workspace + user in state for the callback
     state = json.dumps({"workspace_id": str(workspaceId), "user_id": str(user.id)})
     auth_url = get_google_auth_url(state)
-    return {"url": auth_url}
+    # Direct browser redirect to Google — the frontend hits this via window.location.href
+    return RedirectResponse(url=auth_url, status_code=302)
 
 
 @router.get("/google/callback")
@@ -91,6 +93,13 @@ async def google_callback(
                 location = locations[0]
                 metadata["location_name"] = location.get("name", "")
                 metadata["location_title"] = location.get("title", "")
+                metadata["locations"] = [
+                    {
+                        "name": location.get("name", ""),
+                        "title": location.get("title", ""),
+                        "sync_enabled": True
+                    }
+                ]
     except Exception as e:
         # Store connection even if account/location discovery fails — user can configure later
         metadata["discovery_error"] = str(e)
@@ -120,8 +129,16 @@ async def google_callback(
     await db.flush()
     await db.commit()
 
-    # Redirect back to frontend integration page
-    return RedirectResponse(url="https://revozi.com/integration?connected=google")
+    # Determine onboarding status from the workspace's actual onboarding_complete field
+    ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    ws = ws_result.scalar_one_or_none()
+    onboarding_complete = bool(ws and ws.onboarding_complete)
+
+    frontend_url = getattr(settings, "FRONTEND_URL", "https://revozi.com")
+    flag = "true" if onboarding_complete else "false"
+    return RedirectResponse(
+        url=f"{frontend_url}/auth-callback?connected=google&onboardingComplete={flag}"
+    )
 
 
 @router.get("/{workspace_id}/connections")
@@ -154,6 +171,112 @@ async def list_connections(
         }
         for c in connections
     ]
+
+
+@router.get("/{workspace_id}/locations", response_model=list[LocationResponse])
+async def get_locations(
+    workspace_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.owner_id == user.id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    conn_result = await db.execute(
+        select(PlatformConnection).where(
+            PlatformConnection.workspace_id == workspace_id,
+            PlatformConnection.platform == "google_reviews",
+        )
+    )
+    connection = conn_result.scalar_one_or_none()
+    if not connection:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Google Reviews not connected")
+
+    metadata = connection.metadata_json or {}
+    account_name = metadata.get("account_name")
+    access_token = connection.access_token
+
+    if not account_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No Google Business account linked")
+
+    try:
+        fresh_locations = await list_locations(access_token, account_name)
+    except Exception as e:
+        return []
+
+    stored_locations = metadata.get("locations", [])
+    if not stored_locations and metadata.get("location_name"):
+        stored_locations = [{"name": metadata.get("location_name"), "title": metadata.get("location_title", ""), "sync_enabled": True}]
+
+    sync_map = {loc["name"]: loc.get("sync_enabled", False) for loc in stored_locations}
+
+    response = []
+    for loc in fresh_locations:
+        lname = loc.get("name")
+        ltitle = loc.get("title", "")
+        if lname:
+            response.append(LocationResponse(
+                name=lname,
+                title=ltitle,
+                syncEnabled=sync_map.get(lname, False)
+            ))
+            
+    return response
+
+
+@router.post("/{workspace_id}/locations/toggle", response_model=MessageResponse)
+async def toggle_location(
+    workspace_id: uuid.UUID,
+    body: LocationToggleRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.owner_id == user.id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    conn_result = await db.execute(
+        select(PlatformConnection).where(
+            PlatformConnection.workspace_id == workspace_id,
+            PlatformConnection.platform == "google_reviews",
+        )
+    )
+    connection = conn_result.scalar_one_or_none()
+    if not connection:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Google Reviews not connected")
+
+    metadata = connection.metadata_json or {}
+    stored_locations = list(metadata.get("locations", []))  # copy to avoid issues with SA JSON mutation
+    
+    if not stored_locations and metadata.get("location_name"):
+        stored_locations = [{"name": metadata.get("location_name"), "title": metadata.get("location_title", ""), "sync_enabled": True}]
+
+    found = False
+    for loc in stored_locations:
+        if loc["name"] == body.locationName:
+            loc["sync_enabled"] = body.syncEnabled
+            found = True
+            break
+            
+    if not found:
+        stored_locations.append({
+            "name": body.locationName,
+            "title": body.title,
+            "sync_enabled": body.syncEnabled
+        })
+
+    # re-assign dict to ensure SQLAlchemy flags modification
+    new_metadata = dict(metadata)
+    new_metadata["locations"] = stored_locations
+    connection.metadata_json = new_metadata
+    await db.commit()
+
+    return MessageResponse(message="Location sync toggled successfully")
 
 
 @router.delete("/{workspace_id}/connections/{connection_id}", response_model=MessageResponse)

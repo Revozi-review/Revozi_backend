@@ -36,6 +36,7 @@ class WorkspaceResponse(BaseModel):
 
 class WorkspaceUpdateRequest(BaseModel):
     name: str | None = None
+    slug: str | None = None
     brandTone: str | None = None
     replyStyle: str | None = None
     logoUrl: str | None = None
