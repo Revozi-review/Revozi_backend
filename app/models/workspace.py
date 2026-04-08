@@ -19,6 +19,7 @@ class Workspace(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     brand_tone: Mapped[str] = mapped_column(String(50), nullable=False, default="neutral")
     reply_style: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    business_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     onboarding_complete: Mapped[bool] = mapped_column(default=False)
     notification_preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

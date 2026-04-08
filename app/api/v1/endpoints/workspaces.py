@@ -66,6 +66,8 @@ async def update_workspace(
         ws.brand_tone = body.brandTone
     if body.replyStyle is not None:
         ws.reply_style = body.replyStyle
+    if body.businessType is not None:
+        ws.business_type = body.businessType
     if body.logoUrl is not None:
         ws.logo_url = body.logoUrl
     if body.onboardingComplete is not None:

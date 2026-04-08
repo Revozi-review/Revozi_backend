@@ -282,6 +282,13 @@ async def google_callback(code: str = None, error: str = None, response: Respons
         print(f"✅ [OAuth] Workspace flushed to DB: {workspace.id}")
     else:
         print(f"👤 [OAuth] Existing user found: {email}")
+        ws_result = await db.execute(
+            select(Workspace)
+            .where(Workspace.owner_id == user.id, Workspace.deleted_at.is_(None))
+            .order_by(Workspace.created_at.desc())
+            .limit(1)
+        )
+        workspace = ws_result.scalars().first()
 
     # CRITICAL: Ensure ALL database changes are fully committed before proceeding
     await db.commit()
@@ -294,13 +301,17 @@ async def google_callback(code: str = None, error: str = None, response: Respons
 
     # Redirect to frontend callback with user info
     # Include refreshToken in URL params to handle cross-domain cookie dropping
+    # Check if user has completed onboarding by checking their workspace
+    onboarding_complete = "true" if workspace and workspace.onboarding_complete else "false"
+
     params = urlencode({
         "token": access_token,
         "refreshToken": refresh_token,
-        "firstName": first_name,
-        "lastName": last_name,
-        "email": email,
+        "firstName": first_name or "",
+        "lastName": last_name or "",
+        "email": email or "",
         "id": str(user.id),
+        "onboardingComplete": onboarding_complete,
     })
 
     # Create response with redirect

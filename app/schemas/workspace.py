@@ -11,6 +11,10 @@ class WorkspaceResponse(BaseModel):
     logoUrl: str | None = None
     plan: str
     ownerId: uuid.UUID
+    brandTone: str | None = None
+    replyStyle: str | None = None
+    businessType: str | None = None
+    onboardingComplete: bool | None = None
     createdAt: datetime
     status: str | None = None
     memberCount: int | None = None
@@ -27,6 +31,10 @@ class WorkspaceResponse(BaseModel):
             logoUrl=ws.logo_url,
             plan=ws.plan,
             ownerId=ws.owner_id,
+            brandTone=ws.brand_tone,
+            replyStyle=ws.reply_style,
+            businessType=ws.business_type,
+            onboardingComplete=ws.onboarding_complete,
             createdAt=ws.created_at,
             status="active",
             memberCount=member_count,
@@ -39,6 +47,7 @@ class WorkspaceUpdateRequest(BaseModel):
     slug: str | None = None
     brandTone: str | None = None
     replyStyle: str | None = None
+    businessType: str | None = None
     logoUrl: str | None = None
     onboardingComplete: bool | None = None
 
