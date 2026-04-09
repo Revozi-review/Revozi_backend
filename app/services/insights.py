@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select, and_
@@ -28,12 +28,17 @@ async def generate_weekly_insight(workspace_id: UUID, db: AsyncSession) -> Insig
     if existing.scalar_one_or_none():
         return None
 
+    # Convert to timezone-aware datetimes for correct PostgreSQL comparison
+    # (avoids "timestamp with time zone >= character varying" type error)
+    week_start_dt = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
+    week_end_dt = datetime.combine(week_end + timedelta(days=1), time.min, tzinfo=timezone.utc)
+
     # Get feedback for this week
     result = await db.execute(
         select(Feedback).where(
             Feedback.workspace_id == workspace_id,
-            Feedback.created_at >= str(week_start),
-            Feedback.created_at <= str(week_end + timedelta(days=1)),
+            Feedback.created_at >= week_start_dt,
+            Feedback.created_at < week_end_dt,
         )
     )
     feedback_items = result.scalars().all()
