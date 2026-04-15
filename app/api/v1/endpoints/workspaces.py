@@ -101,6 +101,31 @@ async def delete_workspace(
     ws.deleted_at = sa_func.now()
     await db.commit()
 
+@router.delete("/{workspace_id}/permanent", status_code=204)
+async def permanently_delete_workspace(
+    workspace_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a workspace (hard delete - cannot be recovered)"""
+    result = await db.execute(
+        select(Workspace).where(
+            Workspace.id == workspace_id, 
+            Workspace.owner_id == user.id
+        )
+    )
+    ws = result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Workspace not found"
+        )
+    
+    # Hard delete - actually remove from database permanently
+    await db.delete(ws)
+    await db.commit()
+
+
 
 @router.patch("/{workspace_id}/notifications", response_model=WorkspaceResponse)
 async def update_notifications(
