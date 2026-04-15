@@ -9,7 +9,10 @@ async def get_current_admin_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Verify current user is an admin"""
-    if not current_user.is_admin:
+    # Use getattr to handle missing is_admin field gracefully during migration
+    is_admin = getattr(current_user, 'is_admin', False)
+    
+    if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
