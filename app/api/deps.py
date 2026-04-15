@@ -16,11 +16,8 @@ async def get_current_admin_user(
 ) -> User:
     """Verify current user is an admin"""
     
-    # Check if user's email is in the admin list
-    is_admin = getattr(current_user, 'is_admin', False)
-    is_admin_email = current_user.email in ADMIN_EMAILS
-    
-    if not (is_admin or is_admin_email):
+    # Check if user's email is in the admin list (email-only check)
+    if current_user.email not in ADMIN_EMAILS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
