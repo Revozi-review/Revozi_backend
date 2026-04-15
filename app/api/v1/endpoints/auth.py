@@ -205,7 +205,7 @@ async def google_login():
         raise HTTPException(status_code=500, detail="Google OAuth is not configured")
     params = urlencode({
         "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": "https://revozi-backend-production.up.railway.app/api/v1/auth/google-callback",
+        "redirect_uri": settings.GOOGLE_AUTH_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -227,7 +227,7 @@ async def google_callback(code: str = None, error: str = None, response: Respons
             "code": code,
             "client_id": settings.GOOGLE_CLIENT_ID,
             "client_secret": settings.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": "https://revozi-backend-production.up.railway.app/api/v1/auth/google-callback",
+            "redirect_uri": settings.GOOGLE_AUTH_REDIRECT_URI,
             "grant_type": "authorization_code",
         })
     if token_resp.status_code != 200:

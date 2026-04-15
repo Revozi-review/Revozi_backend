@@ -25,6 +25,29 @@ from app.services.google_reviews import (
 router = APIRouter(prefix="/platforms", tags=["platforms"])
 
 
+@router.get("/google/connect-url")
+async def get_google_connect_url(
+    workspaceId: uuid.UUID = Query(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the Google OAuth URL for an authenticated workspace owner."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google API not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+        )
+
+    result = await db.execute(
+        select(Workspace).where(Workspace.id == workspaceId, Workspace.owner_id == user.id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    state = json.dumps({"workspace_id": str(workspaceId), "user_id": str(user.id)})
+    return {"url": get_google_auth_url(state)}
+
+
 @router.get("/google/connect")
 async def connect_google(
     workspaceId: uuid.UUID = Query(...),
@@ -134,7 +157,7 @@ async def google_callback(
     ws = ws_result.scalar_one_or_none()
     onboarding_complete = bool(ws and ws.onboarding_complete)
 
-    frontend_url = getattr(settings, "FRONTEND_URL", "https://revozi.com")
+    frontend_url = settings.FRONTEND_URL
     flag = "true" if onboarding_complete else "false"
     return RedirectResponse(
         url=f"{frontend_url}/auth-callback?connected=google&onboardingComplete={flag}"
