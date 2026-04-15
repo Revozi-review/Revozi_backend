@@ -1,4 +1,5 @@
 import uuid
+from app.api.deps import get_current_admin_user
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func as sa_func
@@ -104,7 +105,7 @@ async def delete_workspace(
 @router.delete("/{workspace_id}/permanent", status_code=204)
 async def permanently_delete_workspace(
     workspace_id: uuid.UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Permanently delete a workspace (hard delete - cannot be recovered)"""
