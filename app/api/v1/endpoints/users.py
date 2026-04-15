@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import UploadFile, File, APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+import base64
+import io
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
@@ -13,6 +15,29 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def get_me(user: User = Depends(get_current_user)):
     return UserResponse.from_orm_user(user)
 
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload user avatar - stores as base64 data URL"""
+    # Read file content
+    content = await file.read()
+    
+    # Convert to base64 data URL
+    base64_data = base64.b64encode(content).decode('utf-8')
+    mime_type = file.content_type or 'image/jpeg'
+    data_url = f"data:{mime_type};base64,{base64_data}"
+    
+    # Update user avatar
+    user.avatar_url = data_url
+    await db.commit()
+    await db.refresh(user)
+    
+    return UserResponse.from_orm_user(user)
 
 @router.patch("/me", response_model=UserResponse)
 async def update_me(
