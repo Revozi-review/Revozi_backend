@@ -6,7 +6,7 @@ from app.services.email import send_email
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import secret
+import secrets
 
 import re
 import uuid
