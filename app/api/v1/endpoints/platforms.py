@@ -160,7 +160,7 @@ async def google_callback(
     frontend_url = settings.FRONTEND_URL
     flag = "true" if onboarding_complete else "false"
     return RedirectResponse(
-        url=f"{frontend_url}/auth-callback?connected=google&onboardingComplete={flag}"
+        url=f"{frontend_url}/settings?connected=google"
     )
 
 
