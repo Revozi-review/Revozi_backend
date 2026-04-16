@@ -197,15 +197,15 @@ async def reset_password(token: str, new_password: str, db: AsyncSession = Depen
     await db.commit()
     return MessageResponse(message="Password reset successful.")
 
-
 # ── Google OAuth ──────────────────────────────────────────────
-
 @router.get("/google")
 async def google_login():
     if not settings.GOOGLE_CLIENT_ID:
-# Generate random state token
-    state = secrets.token_urlsafe(32)
         raise HTTPException(status_code=500, detail="Google OAuth is not configured")
+    
+    # Generate random state token
+    state = secrets.token_urlsafe(32)
+    
     params = urlencode({
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_AUTH_REDIRECT_URI,
@@ -213,10 +213,9 @@ async def google_login():
         "scope": "openid email profile",
         "access_type": "offline",
         "prompt": "consent",
-	"state": state,
+        "state": state,
     })
     return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}", status_code=302)
-
 
 @router.get("/google-callback")
 async def google_callback(code: str = None, error: str = None, response: Response = None, db: AsyncSession = Depends(get_db)):
