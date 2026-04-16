@@ -6,6 +6,7 @@ from app.services.email import send_email
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import secret
 
 import re
 import uuid
@@ -202,6 +203,8 @@ async def reset_password(token: str, new_password: str, db: AsyncSession = Depen
 @router.get("/google")
 async def google_login():
     if not settings.GOOGLE_CLIENT_ID:
+# Generate random state token
+    state = secrets.token_urlsafe(32)
         raise HTTPException(status_code=500, detail="Google OAuth is not configured")
     params = urlencode({
         "client_id": settings.GOOGLE_CLIENT_ID,
@@ -210,6 +213,7 @@ async def google_login():
         "scope": "openid email profile",
         "access_type": "offline",
         "prompt": "consent",
+	"state": state,
     })
     return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}", status_code=302)
 
