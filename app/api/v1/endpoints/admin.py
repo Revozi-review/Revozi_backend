@@ -247,3 +247,45 @@ async def get_workspace_billing(
         limit=limit or 0,
         tier=plan,
     )
+
+
+@router.post("/cleanup-roles")
+async def cleanup_user_roles(
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """One-time endpoint to reset all user roles except whitelisted admins"""
+    from app.core.deps import ADMIN_EMAILS
+    
+    # Update all users to 'member' except whitelisted admins
+    result = await db.execute(
+        select(User).where(User.email.notin_(ADMIN_EMAILS))
+    )
+    non_admin_users = result.scalars().all()
+    
+    updated_count = 0
+    for u in non_admin_users:
+        if u.role == 'admin':
+            u.role = 'member'
+            updated_count += 1
+    
+    # Ensure whitelisted admins have admin role
+    admin_result = await db.execute(
+        select(User).where(User.email.in_(ADMIN_EMAILS))
+    )
+    admin_users = admin_result.scalars().all()
+    
+    admin_count = 0
+    for u in admin_users:
+        if u.role != 'admin':
+            u.role = 'admin'
+            admin_count += 1
+    
+    await db.commit()
+    
+    return {
+        "message": "User roles cleaned up successfully",
+        "demoted_to_member": updated_count,
+        "promoted_to_admin": admin_count,
+        "total_processed": updated_count + admin_count
+    }
