@@ -82,7 +82,7 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
             subject="Welcome to Revozi",
             template_name="welcome",
             name=user.first_name or user.email.split("@")[0],
-            dashboard_url="https://revozi.com/dashboard"
+            dashboard_url="https://revozi.com/overview"
         )
     except Exception as e:
         print(f"Welcome email failed: {e}")
