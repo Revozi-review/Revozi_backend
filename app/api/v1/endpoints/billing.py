@@ -176,7 +176,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 owner = user_result.scalar_one_or_none()
                 if owner:
                     plan_labels = {"starter": "Starter", "growth": "Growth", "enterprise": "Enterprise"}
-                    plan_prices = {"starter": "49.00", "growth": "249.00", "enterprise": "499.00"}
+                    plan_prices = {"starter": "19.00", "growth": "99.00", "enterprise": "499.00"}
                     try:
                         await send_email(
                             to_email=owner.email,
@@ -186,7 +186,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                             plan_name=f"{plan_labels.get(plan, plan.title())} Plan",
                             amount=plan_prices.get(plan, "0.00"),
                             billing_period="month",
-                            dashboard_url="https://revozi.com/dashboard",
+                            dashboard_url="https://revozi.com/overview",
                         )
                     except Exception as e:
                         print(f"Subscription email failed: {e}")
@@ -215,7 +215,7 @@ async def test_subscription_email(email: str, name: str = "Test User"):
         plan_name="Pro",
         amount="29",
         billing_period="month",
-        dashboard_url="https://revozi.com/dashboard"
+        dashboard_url="https://revozi.com/overview"
     )
     return {"message": f"Subscription email sent to {email}"}
 
