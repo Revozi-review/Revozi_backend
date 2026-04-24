@@ -176,7 +176,7 @@ async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depend
                 to_email=user.email,
                 subject="Reset Your Password - Revozi",
                 template_name="reset_password",
-                reset_url=f"{settings.FRONTEND_URL}/reset-password?token={token}",
+                reset_url=f"{settings.FRONTEND_URL}/reset-password.html?token={token}",
                 name=user.first_name,
             )
         except Exception as e:
