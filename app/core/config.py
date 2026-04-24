@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,https://revozi.com,https://www.revozi.com"
+    CORS_ORIGINS: str = "http://localhost:3000,https://revozi.com,https://www.revozi.com,https://*.revozi.com"
 
     # Email (SendGrid)
     SMTP_PASSWORD: str = ""
