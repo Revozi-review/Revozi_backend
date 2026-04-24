@@ -190,7 +190,7 @@ async def reset_password(token: str, new_password: str, db: AsyncSession = Depen
     try:
         result = await db.execute(select(User).where(User.reset_token == token))
         user = result.scalar_one_or_none()
-        if not user or not user.reset_token_expires or user.reset_token_expires < datetime.now(timezone.utc):
+        if not user or not user.reset_token_expires or user.reset_token_expires.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc) if user.reset_token_expires.tzinfo is None else user.reset_token_expires.replace(tzinfo=None) < datetime.now(timezone.utc).replace(tzinfo=None):
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
         user.password_hash = hash_password(new_password)
         user.reset_token = None
